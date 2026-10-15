@@ -6,6 +6,7 @@
 index.html                              ← トップページ（ツール一覧）
 tools/
   two-stage-compensation/index.html     ← 2段アンプ位相補償ツール
+  mosfet-gm-ro/index.html               ← MOSFET gm・ro 計算機
 ```
 
 公開後の URL は次のようになります。

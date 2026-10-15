@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MOSFET gm・ro 計算機</title>
+<meta name="description" content="W・L・Id から二乗則で MOSFET の gm・ro・Vov・Vgs を計算し、ro の並列値も求めるツール">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap">
+<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+<style>
+/* Layout: one working sheet — compact process strip on top, a spreadsheet-like transistor table below */
+:root{
+  --bg:#f1f4f7; --surface:#ffffff; --fg:#17212c; --muted:#5a6775; --line:#d3dbe3;
+  --nmos:#1d5ea8; --pmos:#b0531a; --accent:#1d5ea8; --out:#f6f8fa;
+  --good:#1b7a45; --warn:#9a6300; --bad:#b3261e; --warn-bg:#fbf0d9; --bad-bg:#fbe4e2;
+  --sans:"IBM Plex Sans JP","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141a; --surface:#161d25; --fg:#e2e8ee; --muted:#93a0ad; --line:#2a3541;
+  --nmos:#6ea9ec; --pmos:#e88c4f; --accent:#6ea9ec; --out:#1a222b;
+  --good:#4fc386; --warn:#e2ab40; --bad:#f06a60; --warn-bg:#33270e; --bad-bg:#3a1714; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141a; --surface:#161d25; --fg:#e2e8ee; --muted:#93a0ad; --line:#2a3541;
+  --nmos:#6ea9ec; --pmos:#e88c4f; --accent:#6ea9ec; --out:#1a222b;
+  --good:#4fc386; --warn:#e2ab40; --bad:#f06a60; --warn-bg:#33270e; --bad-bg:#3a1714; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.6}
+.wrap{max-width:1100px;margin:0 auto;padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
+header{display:grid;gap:4px}
+h1{font-size:22px;font-weight:700;margin:0;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:70ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+h2{font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.proc{display:grid;grid-template-columns:auto repeat(3,minmax(0,1fr));gap:6px 12px;align-items:center;max-width:640px}
+.proc .hd{font-size:12px;color:var(--muted)}
+.proc .ty{font-family:var(--mono);font-size:13px;font-weight:500}
+.proc .ty.N{color:var(--nmos)} .proc .ty.P{color:var(--pmos)}
+input,select{font-family:var(--mono);font-size:13px;padding:5px 7px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);box-sizing:border-box;width:100%;min-width:0}
+input{text-align:right}
+input.name{text-align:left;font-family:var(--sans)}
+input.err{border-color:var(--bad)}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.note{font-size:12px;color:var(--muted);margin:10px 0 0;max-width:75ch}
+.tblhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.tblhead h2{margin:0}
+button{font-family:var(--sans);font-size:13px;padding:6px 12px;border-radius:5px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.x{padding:2px 8px;color:var(--muted);border-color:transparent;background:transparent}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:860px}
+th,td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-weight:500;color:var(--muted);font-size:12px}
+th.o,td.o{background:var(--out);text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+th.o{font-weight:500}
+td.o.big{font-weight:500;font-size:14px}
+td.in{width:76px} td.nm{width:150px} td.ty{width:84px}
+td.st{font-size:12px;white-space:normal;min-width:120px}
+.st .w{color:var(--warn)} .st .b{color:var(--bad)} .st .g{color:var(--good)}
+.unit{font-weight:400;color:var(--muted)}
+.sum{margin-top:12px;font-size:13px;display:flex;gap:18px;flex-wrap:wrap;color:var(--muted)}
+.sum b{font-family:var(--mono);color:var(--fg);font-weight:500}
+.formula{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-x:auto;white-space:nowrap;line-height:1.9}
+.back{font-size:13px;color:var(--accent);text-decoration:none;justify-self:start}.back:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <a class="back" href="../../">← ツール一覧</a>
+    <h1>MOSFET gm・ro 計算機</h1>
+    <p>W・L・Id を入れると、二乗則で gm・ro・Vov・Vgs を計算します。チェックした行の ro は並列値も表示します（例：R1 = ro2 ∥ ro4）。</p>
+  </header>
+
+  <section class="card">
+    <h2>プロセス定数</h2>
+    <div class="proc" id="proc">
+      <span></span><span class="hd">k' = µCox [µA/V²]</span><span class="hd">|Vth| [V]</span><span class="hd">λ·L [µm/V]</span>
+    </div>
+    <p class="note">初期値は 0.18µm 世代の 3.3V デバイスの目安です。使用プロセスの値に置き換えてください（入力値はこのブラウザに保存されます）。<button id="bReset" style="margin-left:6px;padding:2px 8px">目安値に戻す</button></p>
+  </section>
+
+  <section class="card">
+    <div class="tblhead"><h2>トランジスタ</h2><button id="bAdd">行を追加</button></div>
+    <div class="tbl">
+      <table>
+        <thead><tr>
+          <th title="ro の並列計算に含める">∥</th><th>名前</th><th>型</th>
+          <th>W <span class="unit">µm</span></th><th>L <span class="unit">µm</span></th><th>Id <span class="unit">A</span></th>
+          <th class="o">gm</th><th class="o">ro</th><th class="o">gm·ro</th><th class="o">Vov</th><th class="o">Vgs</th><th>判定</th><th></th>
+        </tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+    <div class="sum" id="sum"></div>
+  </section>
+
+  <section class="card">
+    <h2>使っている式</h2>
+    <div class="formula">
+      Vov = √(2·Id / (k'·W/L))　　Vgs = |Vth| + Vov<br>
+      gm = 2·Id / Vov　　ro = 1 / (λ·Id)　　λ = (λ·L) / L
+    </div>
+    <p class="note">PMOS は電圧を絶対値で表示します。Id は 10u、1.5m のように SI 接頭辞で入力できます。Vov が 0.1 V 未満だと弱反転に近く、二乗則は gm を大きめに見積もります。</p>
+  </section>
+</div>
+
+<script>
+const DEF={N:{kp:170,Vth:0.65,lamL:0.08},P:{kp:60,Vth:0.70,lamL:0.10}};
+let uid=1;
+const row=(name,type,W,L,Id)=>({id:uid++,name,type,W,L,Id,sel:false});
+const sample=()=>{uid=1;return [row('M1 入力対','N',4,1,10e-6),row('M2 入力対','N',4,1,10e-6),row('M3 能動負荷','P',4,1,10e-6),row('M4 能動負荷','P',4,1,10e-6),row('M5 テイル','N',2,1,20e-6),row('M6 2段目','P',20,0.5,100e-6),row('M7 電流源','N',10,1,100e-6)]};
+let S={proc:JSON.parse(JSON.stringify(DEF)),rows:sample()};
+S.rows[1].sel=S.rows[3].sel=true;
+try{const s=JSON.parse(localStorage.getItem('mosgmro.v2')||'null');if(s&&s.rows&&s.proc){S=s;uid=Math.max(0,...S.rows.map(r=>r.id))+1}}catch(e){}
+const save=()=>{try{localStorage.setItem('mosgmro.v2',JSON.stringify(S))}catch(e){}};
+
+const PFX=[[1e9,'G'],[1e6,'M'],[1e3,'k'],[1,''],[1e-3,'m'],[1e-6,'µ'],[1e-9,'n'],[1e-12,'p']];
+function eng(x,u){if(!isFinite(x))return '–';const a=Math.abs(x);for(const [m,s] of PFX)if(a>=m*0.9995)return Number((x/m).toPrecision(3))+' '+s+u;return x.toExponential(2)+' '+u}
+function engIn(x){const a=Math.abs(x);for(const [m,s] of PFX)if(a>=m*0.9995)return Number((x/m).toPrecision(4))+(s==='µ'?'u':s);return String(x)}
+function parse(str){const m=String(str).trim().match(/^((?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*([pnuµmkM])?\s*A?$/);if(!m)return NaN;return parseFloat(m[1])*({p:1e-12,n:1e-9,u:1e-6,'µ':1e-6,m:1e-3,k:1e3,M:1e6}[m[2]]||1)}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function calc(t){const d=S.proc[t.type],kp=d.kp*1e-6,lam=d.lamL/t.L;
+  const Vov=Math.sqrt(2*t.Id/(kp*t.W/t.L)),gm=2*t.Id/Vov,ro=1/(lam*t.Id);
+  let st=['g','OK'];if(Vov<0.1)st=['b','Vov が小さく弱反転寄り（gm 過大）'];else if(Vov>0.5)st=['w','Vov が大きく電圧余裕が減る'];
+  return {Vov,gm,ro,gmro:gm*ro,Vgs:d.Vth+Vov,st}}
+
+/* process strip */
+const procEl=document.getElementById('proc');
+function renderProc(){procEl.querySelectorAll('.pr').forEach(e=>e.remove());
+  ['N','P'].forEach(ty=>{const frag=document.createElement('div');frag.style.display='contents';frag.className='pr';
+    frag.innerHTML=`<span class="ty ${ty}">${ty}MOS</span>`+['kp','Vth','lamL'].map(k=>`<input data-t="${ty}" data-k="${k}" value="${S.proc[ty][k]}" inputmode="decimal" aria-label="${ty}MOS ${k}">`).join('');
+    procEl.appendChild(frag)});
+  procEl.querySelectorAll('input').forEach(i=>i.addEventListener('input',()=>{const v=parseFloat(i.value);if(!(v>0)){i.classList.add('err');return}i.classList.remove('err');S.proc[i.dataset.t][i.dataset.k]=v;updateAll()}))}
+document.getElementById('bReset').onclick=()=>{S.proc=JSON.parse(JSON.stringify(DEF));renderProc();updateAll()};
+
+/* table */
+const tb=document.getElementById('tb');
+function renderRows(){
+  tb.innerHTML=S.rows.map(t=>`<tr data-id="${t.id}">
+    <td><input type="checkbox" class="sel" ${t.sel?'checked':''} aria-label="並列計算に含める" style="width:auto"></td>
+    <td class="nm"><input class="name" data-k="name" value="${esc(t.name)}" aria-label="名前"></td>
+    <td class="ty"><select data-k="type" aria-label="型"><option value="N" ${t.type==='N'?'selected':''}>NMOS</option><option value="P" ${t.type==='P'?'selected':''}>PMOS</option></select></td>
+    <td class="in"><input data-k="W" value="${t.W}" inputmode="decimal" aria-label="W"></td>
+    <td class="in"><input data-k="L" value="${t.L}" inputmode="decimal" aria-label="L"></td>
+    <td class="in"><input data-k="Id" value="${engIn(t.Id)}" inputmode="decimal" aria-label="Id"></td>
+    <td class="o big" data-o="gm"></td><td class="o big" data-o="ro"></td><td class="o" data-o="gmro"></td><td class="o" data-o="Vov"></td><td class="o" data-o="Vgs"></td>
+    <td class="st" data-o="st"></td><td><button class="x" aria-label="この行を削除">×</button></td></tr>`).join('');
+  tb.querySelectorAll('tr').forEach(tr=>{const t=S.rows.find(r=>r.id===+tr.dataset.id);
+    tr.querySelectorAll('[data-k]').forEach(el=>el.addEventListener('input',()=>{const k=el.dataset.k;
+      if(k==='name'||k==='type'){t[k]=el.value}else{const v=k==='Id'?parse(el.value):parseFloat(el.value);if(!(v>0)){el.classList.add('err');return}el.classList.remove('err');t[k]=v}
+      updateRow(tr,t);updateSum();save()}));
+    tr.querySelector('.sel').addEventListener('change',e=>{t.sel=e.target.checked;updateSum();save()});
+    tr.querySelector('.x').addEventListener('click',()=>{S.rows=S.rows.filter(r=>r!==t);renderRows();updateAll()});
+  });
+}
+function updateRow(tr,t){const r=calc(t),o=k=>tr.querySelector(`[data-o="${k}"]`);
+  o('gm').textContent=eng(r.gm,'S');o('ro').textContent=eng(r.ro,'Ω');o('gmro').textContent=Number(r.gmro.toPrecision(3));
+  o('Vov').textContent=(r.Vov*1000).toFixed(0)+' mV';o('Vgs').textContent=r.Vgs.toFixed(2)+' V';
+  o('st').innerHTML=`<span class="${r.st[0]}">${r.st[1]}</span>`}
+function updateSum(){const sel=S.rows.filter(r=>r.sel),el=document.getElementById('sum');
+  if(!sel.length){el.innerHTML='<span>∥ 列にチェックを入れると、その行の ro の並列値を表示します。</span>';return}
+  const rp=1/sel.reduce((a,t)=>a+1/calc(t).ro,0);
+  el.innerHTML=`<span>${sel.map(t=>esc(t.name.split(' ')[0])).join(' ∥ ')}</span><span>ro 並列 <b>${eng(rp,'Ω')}</b></span>`}
+function updateAll(){tb.querySelectorAll('tr').forEach(tr=>updateRow(tr,S.rows.find(r=>r.id===+tr.dataset.id)));updateSum();save()}
+document.getElementById('bAdd').onclick=()=>{S.rows.push(row('M'+(S.rows.length+1),'N',2,1,10e-6));renderRows();updateAll()};
+
+renderProc();renderRows();updateAll();
+</script>
+
+</body>
+</html>
