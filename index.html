@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>アナログ回路設計ツール</title>
+<meta name="description" content="アナログ回路設計に役立つ計算・解析ツールをブラウザ上で公開しています。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap">
+<style>
+:root{
+  --bg:#f1f4f7; --surface:#ffffff; --fg:#17212c; --muted:#5a6775; --line:#d3dbe3; --grid:#e5eaf0;
+  --accent:#1d5ea8; --phase:#b0531a;
+  --sans:"IBM Plex Sans JP","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f141a; --surface:#161d25; --fg:#e2e8ee; --muted:#93a0ad; --line:#2a3541; --grid:#1f2934;
+  --accent:#6ea9ec; --phase:#e88c4f; color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.7}
+.wrap{max-width:1040px;margin:0 auto;padding:48px 16px 64px}
+header{margin-bottom:36px;display:grid;gap:6px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:28px;margin:0;line-height:1.3;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:62ch}
+h2{font-size:12px;font-weight:500;letter-spacing:.12em;color:var(--muted);margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.card{display:grid;grid-template-rows:auto 1fr;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none;transition:border-color .15s,transform .15s}
+a.card:hover{border-color:var(--accent);transform:translateY(-2px)}
+a.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.thumb{height:120px;border-bottom:1px solid var(--line);background:var(--bg)}
+.thumb svg{width:100%;height:100%;display:block}
+.body{padding:14px 16px 16px;display:grid;gap:6px;align-content:start}
+.body h3{margin:0;font-size:16px}
+.body p{margin:0;font-size:13px;color:var(--muted)}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.tags span{font-family:var(--mono);font-size:11px;padding:1px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
+.card.soon{border-style:dashed;background:transparent}
+.card.soon .thumb{display:grid;place-items:center;color:var(--muted);font-family:var(--mono);font-size:12px;background:transparent}
+footer{margin-top:48px;font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Analog Design Tools</span>
+    <h1>アナログ回路設計ツール</h1>
+    <p>アナログ回路設計の手計算や見積もりを、ブラウザ上ですぐ試せるツールにまとめています。インストール不要で、計算はすべてお使いのブラウザ内で行われます。</p>
+  </header>
+
+  <section>
+    <h2>ツール一覧</h2>
+    <div class="grid">
+      <a class="card" href="tools/two-stage-compensation/">
+        <div class="thumb" aria-hidden="true">
+          <svg viewBox="0 0 300 120" preserveAspectRatio="none">
+            <g stroke="var(--grid)" stroke-width="1">
+              <path d="M0 30H300M0 60H300M0 90H300M60 0V120M120 0V120M180 0V120M240 0V120"/>
+            </g>
+            <path d="M0 22 H70 Q90 22 110 34 L230 92 Q250 102 300 116" fill="none" stroke="var(--accent)" stroke-width="2.2"/>
+            <path d="M0 40 H60 Q90 40 110 62 Q140 72 190 76 Q220 80 240 100 L300 110" fill="none" stroke="var(--phase)" stroke-width="2.2"/>
+          </svg>
+        </div>
+        <div class="body">
+          <h3>2段アンプ位相補償ツール</h3>
+          <p>ミラー補償型2段アンプのボード線図、位相余裕、極とゼロを計算します。目標位相余裕からの Cc 自動算出や Rz によるゼロ調整にも対応しています。</p>
+          <div class="tags"><span>オペアンプ</span><span>位相余裕</span><span>ボード線図</span></div>
+        </div>
+      </a>
+
+      <div class="card soon">
+        <div class="thumb">準備中</div>
+        <div class="body">
+          <h3>次のツール</h3>
+          <p>新しいツールを順次追加予定です。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>計算結果は簡略化モデルに基づく目安です。最終的な設計は回路シミュレーションで確認してください。</footer>
+</div>
+</body>
+</html>

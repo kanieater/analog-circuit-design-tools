@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>2段アンプ位相補償ツール</title>
+<meta name="description" content="ミラー補償型2段アンプのボード線図・位相余裕・極とゼロをブラウザ上で計算するツール">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap">
+<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+<style>
+/* Layout: instrument panel — parameter rack on the left, live Bode display and readouts on the right */
+:root{
+  --bg:#f1f4f7; --surface:#ffffff; --fg:#17212c; --muted:#5a6775; --line:#d3dbe3; --grid:#e5eaf0;
+  --mag:#1d5ea8; --phase:#b0531a; --ghost:#a2adb8; --accent:#1d5ea8;
+  --good:#1b7a45; --warn:#9a6300; --bad:#b3261e;
+  --good-bg:#e3f3ea; --warn-bg:#fbf0d9; --bad-bg:#fbe4e2;
+  --sans:"IBM Plex Sans JP","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141a; --surface:#161d25; --fg:#e2e8ee; --muted:#93a0ad; --line:#2a3541; --grid:#1f2934;
+  --mag:#6ea9ec; --phase:#e88c4f; --ghost:#5a6774; --accent:#6ea9ec;
+  --good:#4fc386; --warn:#e2ab40; --bad:#f06a60;
+  --good-bg:#14301f; --warn-bg:#33270e; --bad-bg:#3a1714; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141a; --surface:#161d25; --fg:#e2e8ee; --muted:#93a0ad; --line:#2a3541; --grid:#1f2934;
+  --mag:#6ea9ec; --phase:#e88c4f; --ghost:#5a6774; --accent:#6ea9ec;
+  --good:#4fc386; --warn:#e2ab40; --bad:#f06a60;
+  --good-bg:#14301f; --warn-bg:#33270e; --bad-bg:#3a1714; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.6}
+.wrap{max-width:1240px;margin:0 auto;padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{display:grid;gap:4px;margin-bottom:20px}
+h1{font-size:22px;font-weight:700;margin:0;text-wrap:balance;letter-spacing:.01em}
+header p{margin:0;color:var(--muted);max-width:70ch}
+.layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;display:grid;gap:18px}
+.group{display:grid;gap:10px}
+.group h2{font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.prm{display:grid;grid-template-columns:auto 1fr 92px;gap:4px 10px;align-items:center}
+.prm label{font-family:var(--mono);font-size:13px;min-width:34px}
+.prm .desc{grid-column:1/-1;font-size:12px;color:var(--muted);margin-top:-2px}
+.prm input[type=range]{width:100%;accent-color:var(--accent);min-width:0}
+.prm input[type=text]{width:100%;font-family:var(--mono);font-size:13px;padding:4px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);text-align:right;box-sizing:border-box}
+.prm input[type=text].err{border-color:var(--bad)}
+input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.actions{display:grid;gap:8px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{font-family:var(--sans);font-size:13px;padding:7px 10px;border-radius:5px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer;text-align:left}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--surface);border-color:var(--accent);font-weight:500}
+.target{display:flex;gap:6px;align-items:center;font-size:13px}
+.target input{width:56px;font-family:var(--mono);padding:4px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);text-align:right}
+.note{font-size:12px;color:var(--muted);min-height:1.2em}
+main{display:grid;gap:16px;min-width:0}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:560px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.m{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:2px;min-width:0}
+.m .k{font-size:12px;color:var(--muted)}
+.m .v{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m.pm{border-width:1px 1px 1px 4px}
+.m.pm.good{border-left-color:var(--good)} .m.pm.warn{border-left-color:var(--warn)} .m.pm.bad{border-left-color:var(--bad)}
+.pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;font-weight:500;justify-self:start}
+.pill.good{background:var(--good-bg);color:var(--good)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.bad{background:var(--bad-bg);color:var(--bad)}
+.plotbox{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;gap:8px}
+.plothead{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend{display:flex;gap:14px;flex-wrap:wrap}
+.legend span::before{content:"";display:inline-block;width:16px;height:2px;margin-right:6px;vertical-align:middle;background:currentColor}
+.lg-mag{color:var(--mag)} .lg-ph{color:var(--phase)} .lg-gh{color:var(--ghost)}
+.legend span{color:var(--muted)}
+.legend .lg-mag::before{background:var(--mag)} .legend .lg-ph::before{background:var(--phase)} .legend .lg-gh::before{background:var(--ghost)}
+#readout{font-family:var(--mono);font-variant-numeric:tabular-nums}
+canvas{width:100%;height:440px;display:block;touch-action:none}
+@media (max-width:560px){canvas{height:380px}}
+.advice{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:13px}
+.advice strong{font-weight:700}
+.advice ul{margin:6px 0 0;padding-left:1.2em}
+.two{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px}
+@media (max-width:980px){.two{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:10px;min-width:0}
+.card h3{font-size:14px;margin:0}
+.card p{margin:0;font-size:13px;color:var(--muted);max-width:65ch}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:500;color:var(--muted);font-size:12px}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+td.f{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.tag{font-size:11px;padding:0 6px;border-radius:3px;margin-left:4px;font-family:var(--sans)}
+.tag.rhp{background:var(--bad-bg);color:var(--bad)} .tag.lhp{background:var(--good-bg);color:var(--good)}
+.schem{overflow-x:auto}
+.schem svg{width:100%;min-width:440px;height:auto;display:block}
+.schem .w{stroke:var(--fg);stroke-width:1.6;fill:none}
+.schem .cmp{stroke:var(--accent);stroke-width:1.8;fill:none}
+.schem text{fill:var(--fg);font-family:var(--mono);font-size:12px}
+.schem text.lb{fill:var(--muted);font-size:11px}
+.schem .dot{fill:var(--fg)}
+.schem .ac{fill:var(--accent)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+#params{display:grid;gap:18px}
+.back{font-size:13px;color:var(--accent);text-decoration:none;justify-self:start}.back:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <a class="back" href="../../">← ツール一覧</a>
+    <h1>2段アンプ位相補償ツール</h1>
+    <p>ミラー補償型2段アンプを小信号の8パラメータに簡略化し、ループゲインのボード線図・位相余裕・極とゼロをその場で計算します。値は 200u、1.5p、500k のように SI 接頭辞で入力できます。</p>
+  </header>
+
+  <div class="layout">
+    <aside class="panel" id="panel">
+      <div id="params"></div>
+      <div class="group">
+        <h2>補償の自動調整</h2>
+        <div class="actions">
+          <div class="row">
+            <span class="target">目標 PM <input type="text" id="pmTarget" value="60" inputmode="decimal" aria-label="目標位相余裕"> °</span>
+            <button class="primary" id="btnCc">Cc を求める</button>
+          </div>
+          <button id="btnRz1">Rz = 1/gm2（右半面ゼロを消す）</button>
+          <button id="btnRz2">Rz でゼロを p2 に重ねる</button>
+          <div class="row">
+            <button id="btnGhost">現在の曲線を比較用に固定</button>
+            <button id="btnReset">初期値に戻す</button>
+          </div>
+          <div class="note" id="note"></div>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="metrics">
+        <div class="m pm" id="mPMbox"><span class="k">位相余裕 PM</span><span class="v" id="mPM">–</span><span class="pill" id="mPMpill">–</span></div>
+        <div class="m"><span class="k">ユニティゲイン周波数</span><span class="v" id="mUGF">–</span></div>
+        <div class="m"><span class="k">ゲイン余裕 GM</span><span class="v" id="mGM">–</span></div>
+        <div class="m"><span class="k">DC ループゲイン</span><span class="v" id="mA0">–</span></div>
+      </div>
+
+      <div class="plotbox">
+        <div class="plothead">
+          <div class="legend"><span class="lg-mag">|T| [dB]</span><span class="lg-ph">∠T [°]</span><span class="lg-gh" id="lgGhost" hidden>比較用</span></div>
+          <div id="readout">グラフ上をなぞると値を表示</div>
+        </div>
+        <canvas id="cv" aria-label="ループゲインのボード線図"></canvas>
+      </div>
+
+      <div class="advice" id="advice"></div>
+
+      <div class="two">
+        <div class="card">
+          <h3>近似式と厳密計算の比較</h3>
+          <p>近似値は手計算で使う式、厳密値は下の等価回路をそのまま解いた結果です。差が大きい項目は近似の前提（p2 ≫ p1 など）が崩れています。</p>
+          <div class="tbl"><table id="tbl"></table></div>
+        </div>
+        <div class="card">
+          <h3>簡略化した小信号モデル</h3>
+          <p>各段を「トランスコンダクタンス + 出力抵抗 ∥ 寄生容量」に置き換え、段間をミラー容量 Cc とゼロ調整抵抗 Rz で結びます。ループゲインは T = β·A です。</p>
+          <div class="schem">
+            <svg viewBox="0 0 520 200" role="img" aria-label="2段アンプの小信号等価回路">
+              <!-- stage 1 net -->
+              <path class="w" d="M90 99 V60 H230 V25 H246"/>
+              <path class="w" d="M90 131 V170"/>
+              <circle class="w" cx="90" cy="115" r="16"/>
+              <path class="w" d="M90 126 V104 M85 109 L90 103 L95 109"/>
+              <text x="44" y="150" class="lb">gm1·vin</text>
+              <path class="w" d="M150 60 V92 l8 4 -16 8 16 8 -16 8 16 8 -8 4 V170"/>
+              <text x="122" y="88" >R1</text>
+              <path class="w" d="M195 60 V109 M183 109 H207 M183 117 H207 M195 117 V170"/>
+              <text x="203" y="104">C1</text>
+              <circle class="dot" cx="170" cy="60" r="3"/>
+              <text x="160" y="52">v1</text>
+              <!-- compensation -->
+              <path class="cmp" d="M246 25 l4 -8 8 16 8 -16 8 16 8 -16 8 16 4 -8 H306 M306 13 V37 M314 13 V37 M314 25 H360 V60"/>
+              <text x="258" y="52" class="ac">Rz</text>
+              <text x="302" y="52" class="ac">Cc</text>
+              <!-- stage 2 net -->
+              <path class="w" d="M360 60 H500"/>
+              <circle class="w" cx="380" cy="115" r="16"/>
+              <path class="w" d="M380 60 V99 M380 131 V170 M380 104 V126 M375 121 L380 127 L385 121"/>
+              <text x="332" y="150" class="lb">gm2·v1</text>
+              <path class="w" d="M425 60 V92 l8 4 -16 8 16 8 -16 8 16 8 -8 4 V170"/>
+              <text x="398" y="88">R2</text>
+              <path class="w" d="M468 60 V109 M456 109 H480 M456 117 H480 M468 117 V170"/>
+              <text x="476" y="104">CL</text>
+              <circle class="dot" cx="440" cy="60" r="3"/>
+              <circle class="w" cx="500" cy="60" r="3"/>
+              <text x="482" y="50">vout</text>
+              <!-- ground -->
+              <path class="w" d="M70 170 H480 M266 170 V180 M254 180 H278 M259 185 H273 M264 190 H268"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script id="math">
+/* ---------- pure math (no DOM) ---------- */
+const PM_ = {};
+PM_.add=(a,b)=>{const n=Math.max(a.length,b.length),r=[];for(let i=0;i<n;i++)r.push((a[i]||0)+(b[i]||0));return r};
+PM_.mul=(a,b)=>{const r=new Array(a.length+b.length-1).fill(0);for(let i=0;i<a.length;i++)for(let j=0;j<b.length;j++)r[i+j]+=a[i]*b[j];return r};
+PM_.trim=a=>{a=a.slice();while(a.length>1&&a[a.length-1]===0)a.pop();return a};
+// divide ascending poly a by (1 + t s)
+PM_.divLin=(a,t)=>{const n=a.length-1,q=[];let prev=0;for(let k=0;k<n;k++){const v=a[k]-t*prev;q.push(v);prev=v}return q};
+// model: returns loop gain numerator/denominator (ascending powers of s)
+function model(p){
+  const t=p.Cc*p.Rz, G1=1/p.R1, G2=1/p.R2;
+  const P1=[G1, p.C1+G1*t+p.Cc, p.C1*t];
+  const P2=[G2, p.CL+G2*t+p.Cc, p.CL*t];
+  let zc=p.gm2*t-p.Cc; if(Math.abs(zc)<1e-9*p.Cc) zc=0;
+  const P3=[0, p.gm2*p.Cc, p.Cc*zc];
+  let den=PM_.add(PM_.mul(P1,P2),P3);
+  den = t>0 ? PM_.divLin(den,t) : den;
+  den=PM_.trim(den);
+  const num=PM_.trim([p.beta*p.gm1*p.gm2, p.beta*p.gm1*zc]);
+  return {num,den};
+}
+function evalP(a,w){let re=0,im=0;for(let i=a.length-1;i>=0;i--){const r=-im*w+a[i];im=re*w;re=r}return [re,im]}
+function T(m,f){const w=2*Math.PI*f,[nr,ni]=evalP(m.num,w),[dr,di]=evalP(m.den,w),d=dr*dr+di*di;return [(nr*dr+ni*di)/d,(ni*dr-nr*di)/d]}
+function sweep(m,fmin,fmax,N){
+  const f=[],db=[],ph=[];let prev=null,off=0;
+  const l0=Math.log10(fmin),l1=Math.log10(fmax);
+  for(let i=0;i<N;i++){const fi=Math.pow(10,l0+(l1-l0)*i/(N-1));const [re,im]=T(m,fi);
+    let a=Math.atan2(im,re)*180/Math.PI; if(prev!==null){let d=a+off-prev;while(d>180){off-=360;d-=360}while(d<-180){off+=360;d+=360}} a+=off; prev=a;
+    f.push(fi);db.push(20*Math.log10(Math.hypot(re,im)));ph.push(a)}
+  return {f,db,ph};
+}
+function analyze(s){
+  const r={ugf:null,pm:null,f180:null,gm:null,a0:s.db[0]};
+  for(let i=0;i<s.f.length-1;i++){
+    if(r.ugf===null&&s.db[i]>=0&&s.db[i+1]<0){const k=s.db[i]/(s.db[i]-s.db[i+1]);
+      r.ugf=Math.pow(10,Math.log10(s.f[i])+k*(Math.log10(s.f[i+1])-Math.log10(s.f[i])));r.pm=180+s.ph[i]+k*(s.ph[i+1]-s.ph[i])}
+    if(r.f180===null&&s.ph[i]>-180&&s.ph[i+1]<=-180){const k=(s.ph[i]+180)/(s.ph[i]-s.ph[i+1]);
+      r.f180=Math.pow(10,Math.log10(s.f[i])+k*(Math.log10(s.f[i+1])-Math.log10(s.f[i])));r.gm=-(s.db[i]+k*(s.db[i+1]-s.db[i]))}
+  }
+  if(r.ugf===null&&s.db[0]<0)r.noCross='low'; else if(r.ugf===null)r.noCross='high';
+  return r;
+}
+const analyzeP=p=>analyze(sweep(model(p),1e-3,1e13,3200));
+// roots of real ascending poly, degree <= 3
+function cEval(a,z){let re=0,im=0;for(let i=a.length-1;i>=0;i--){const r=re*z.re-im*z.im+a[i];im=re*z.im+im*z.re;re=r}return {re,im}}
+function cDiv(a,b){const d=b.re*b.re+b.im*b.im;return {re:(a.re*b.re+a.im*b.im)/d,im:(a.im*b.re-a.re*b.im)/d}}
+function deriv(a){return a.slice(1).map((c,i)=>c*(i+1))}
+function polish(a,z){const d=deriv(a);for(let i=0;i<30;i++){const f=cEval(a,z),g=cEval(d,z);if(g.re===0&&g.im===0)break;const s=cDiv(f,g);z={re:z.re-s.re,im:z.im-s.im};if(Math.hypot(s.re,s.im)<1e-14*Math.hypot(z.re,z.im))break}return z}
+function quad(c0,c1,c2){const D=c1*c1-4*c2*c0;
+  if(D>=0){const q=-0.5*(c1+(c1>=0?1:-1)*Math.sqrt(D));return [{re:q/c2,im:0},{re:q!==0?c0/q:0,im:0}]}
+  const re=-c1/(2*c2),im=Math.sqrt(-D)/(2*Math.abs(c2));return [{re,im},{re,im:-im}]}
+function roots(a){a=PM_.trim(a);const n=a.length-1;if(n<1)return[];
+  if(n===1)return[{re:-a[0]/a[1],im:0}];
+  if(n===2)return quad(a[0],a[1],a[2]).map(z=>polish(a,z));
+  if(n===3){const R=1+Math.max(...a.slice(0,3).map(c=>Math.abs(c/a[3])));
+    const f=x=>((a[3]*x+a[2])*x+a[1])*x+a[0];let lo=-R,hi=R,flo=f(lo);
+    for(let i=0;i<400;i++){const mid=(lo+hi)/2,fm=f(mid);if((fm<0)===(flo<0)){lo=mid;flo=fm}else hi=mid}
+    let r=(lo+hi)/2;r=polish(a,{re:r,im:0}).re;
+    const q2=a[3],q1=a[2]+r*q2,q0=a[1]+r*q1;
+    return [{re:r,im:0},...quad(q0,q1,q2).map(z=>polish(a,z))]}
+  return [];
+}
+function approx(p){
+  const tw=2*Math.PI;
+  const A0=p.gm1*p.gm2*p.R1*p.R2;
+  const p1=1/(tw*p.gm2*p.R2*p.R1*p.Cc);
+  const p2=p.gm2*p.Cc/(tw*(p.C1*p.CL+p.Cc*(p.C1+p.CL)));
+  const zd=p.Cc*(1/p.gm2-p.Rz);
+  const z=Math.abs(zd)<1e-30?Infinity:1/(tw*zd); // >0: RHP
+  const gbw=p.beta*p.gm1/(tw*p.Cc);
+  const p3=p.Rz>0?1/(tw*p.Rz*p.C1):Infinity;
+  let pm=90-Math.atan(gbw/p2)*180/Math.PI-(isFinite(z)?Math.atan(gbw/z)*180/Math.PI:0)-(isFinite(p3)?Math.atan(gbw/p3)*180/Math.PI:0);
+  return {A0,p1,p2,z,gbw,p3,pm};
+}
+function findCc(p,target){
+  const lo=-16,hi=-9,N=70;let prevC=null,prevPM=null;
+  for(let i=0;i<=N;i++){const c=Math.pow(10,lo+(hi-lo)*i/N);const r=analyzeP({...p,Cc:c});const pm=r.pm;
+    if(pm!==null&&pm>=target){
+      if(prevC===null)return {Cc:c,pm};
+      let a=Math.log10(prevC),b=Math.log10(c);
+      for(let k=0;k<40;k++){const mid=(a+b)/2,rr=analyzeP({...p,Cc:Math.pow(10,mid)});if(rr.pm!==null&&rr.pm>=target)b=mid;else a=mid}
+      const Cc=Math.pow(10,b);return {Cc,pm:analyzeP({...p,Cc}).pm}}
+    prevC=c;prevPM=pm}
+  return null;
+}
+</script>
+
+<script>
+/* ---------- UI ---------- */
+const SPEC=[
+ {g:'1段目（入力段）',k:'gm1',sym:'gm1',u:'S',min:1e-6,max:1e-1,def:200e-6,d:'入力差動対のトランスコンダクタンス'},
+ {g:'1段目（入力段）',k:'R1',sym:'R1',u:'Ω',min:1e3,max:1e9,def:500e3,d:'1段目出力抵抗（ro2∥ro4 など）'},
+ {g:'1段目（入力段）',k:'C1',sym:'C1',u:'F',min:1e-15,max:1e-10,def:100e-15,d:'1段目出力ノードの寄生容量（≒ 2段目入力容量）'},
+ {g:'2段目（出力段）',k:'gm2',sym:'gm2',u:'S',min:1e-6,max:1,def:2e-3,d:'出力段トランジスタのトランスコンダクタンス'},
+ {g:'2段目（出力段）',k:'R2',sym:'R2',u:'Ω',min:1e2,max:1e9,def:100e3,d:'2段目出力抵抗（負荷抵抗を含む）'},
+ {g:'2段目（出力段）',k:'CL',sym:'CL',u:'F',min:1e-15,max:1e-8,def:2e-12,d:'負荷容量'},
+ {g:'位相補償',k:'Cc',sym:'Cc',u:'F',min:1e-15,max:1e-10,def:300e-15,d:'ミラー補償容量'},
+ {g:'位相補償',k:'Rz',sym:'Rz',u:'Ω',min:1,max:1e7,def:0,zero:true,d:'ゼロ調整抵抗（0 で無し）'},
+ {g:'帰還',k:'beta',sym:'β',u:'',min:1e-3,max:1,def:1,d:'帰還率（ボルテージフォロワで 1）'},
+];
+const P={};SPEC.forEach(s=>P[s.k]=s.def);
+const PFX=[[1e12,'T'],[1e9,'G'],[1e6,'M'],[1e3,'k'],[1,''],[1e-3,'m'],[1e-6,'µ'],[1e-9,'n'],[1e-12,'p'],[1e-15,'f']];
+function eng(x,u='',dig=3){if(x===0)return '0'+(u?' '+u:'');if(!isFinite(x))return '∞';const a=Math.abs(x);
+  for(const [m,s] of PFX){if(a>=m*0.9995){let v=x/m;let str=Number(v.toPrecision(dig)).toString();return str+(u||s?' ':'')+s+u}}
+  return x.toExponential(2)+(u?' '+u:'')}
+function engIn(x){return eng(x,'',4).replace('µ','u').replace(' ','')}
+function parse(str){const m=String(str).trim().match(/^([+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(meg|Meg|MEG|[fpnuµmkKMGT])?\s*[A-Za-zΩ]*$/);if(!m)return NaN;
+  const mult={f:1e-15,p:1e-12,n:1e-9,u:1e-6,'µ':1e-6,m:1e-3,k:1e3,K:1e3,M:1e6,meg:1e6,Meg:1e6,MEG:1e6,G:1e9,T:1e12}[m[2]]||1;return parseFloat(m[1])*mult}
+const sToV=(s,sp)=>{if(sp.zero&&+s===0)return 0;const lo=Math.log10(sp.min),hi=Math.log10(sp.max);const t=sp.zero?(s-1)/999:s/1000;return Math.pow(10,lo+(hi-lo)*t)};
+const vToS=(v,sp)=>{if(sp.zero&&v<=0)return 0;const lo=Math.log10(sp.min),hi=Math.log10(sp.max);let t=(Math.log10(v)-lo)/(hi-lo);t=Math.min(1,Math.max(0,t));return sp.zero?1+t*999:t*1000};
+
+const box=document.getElementById('params');let curG=null,grp;
+SPEC.forEach(sp=>{
+  if(sp.g!==curG){curG=sp.g;grp=document.createElement('div');grp.className='group';grp.innerHTML=`<h2>${sp.g}</h2>`;box.appendChild(grp)}
+  const r=document.createElement('div');r.className='prm';
+  r.innerHTML=`<label for="t_${sp.k}">${sp.sym}</label><input type="range" id="r_${sp.k}" min="0" max="1000" step="1" aria-label="${sp.sym} スライダー"><input type="text" id="t_${sp.k}" inputmode="decimal" spellcheck="false"><span class="desc">${sp.d}${sp.u?' ['+sp.u+']':''}</span>`;
+  grp.appendChild(r);
+  const rg=r.querySelector('input[type=range]'),tx=r.querySelector('input[type=text]');
+  rg.addEventListener('input',()=>{P[sp.k]=sToV(+rg.value,sp);tx.value=engIn(P[sp.k]);tx.classList.remove('err');update()});
+  tx.addEventListener('input',()=>{const v=parse(tx.value);if(isNaN(v)||(v<=0&&!sp.zero)){tx.classList.add('err');return}tx.classList.remove('err');P[sp.k]=v;rg.value=vToS(v,sp);update()});
+  tx.addEventListener('blur',()=>{if(!tx.classList.contains('err'))tx.value=engIn(P[sp.k])});
+});
+function syncInputs(){SPEC.forEach(sp=>{document.getElementById('t_'+sp.k).value=engIn(P[sp.k]);document.getElementById('t_'+sp.k).classList.remove('err');document.getElementById('r_'+sp.k).value=vToS(P[sp.k],sp)})}
+
+let ghost=null,hoverF=null,last=null;
+const note=document.getElementById('note');
+document.getElementById('btnCc').onclick=()=>{const t=parse(document.getElementById('pmTarget').value);if(!(t>0&&t<90)){note.textContent='目標 PM は 0〜90° の範囲で入力してください。';return}
+  const r=findCc(P,t);if(!r){note.textContent=`Cc を 0.1 fF〜100 pF の範囲で振っても PM ${t}° に届きません。gm2 を上げるか CL を下げてください。`;return}
+  P.Cc=r.Cc;syncInputs();update();note.textContent=`Cc = ${eng(r.Cc,'F')} で PM ${r.pm.toFixed(1)}°（Rz = ${eng(P.Rz,'Ω')} のまま）`};
+document.getElementById('btnRz1').onclick=()=>{P.Rz=1/P.gm2;syncInputs();update();note.textContent=`Rz = 1/gm2 = ${eng(P.Rz,'Ω')}。ゼロが無限遠へ移り、右半面ゼロによる位相遅れが消えます。`};
+document.getElementById('btnRz2').onclick=()=>{P.Rz=(1/P.gm2)*(1+P.CL/P.Cc);syncInputs();update();note.textContent=`Rz = (1/gm2)(1+CL/Cc) = ${eng(P.Rz,'Ω')}。左半面ゼロが第2極を打ち消す設定です。CL が変わるとずれる点に注意。`};
+document.getElementById('btnGhost').onclick=()=>{ghost={...P};document.getElementById('lgGhost').hidden=false;note.textContent='現在の曲線を灰色で固定しました。パラメータを変えて比べられます。';draw()};
+document.getElementById('btnReset').onclick=()=>{SPEC.forEach(s=>P[s.k]=s.def);ghost=null;document.getElementById('lgGhost').hidden=true;syncInputs();note.textContent='';update()};
+
+function status(pm){if(pm===null)return ['warn','交差なし'];if(pm<=0)return ['bad','不安定'];if(pm<45)return ['bad','発振リスク'];if(pm<60)return ['warn','要注意'];return ['good','良好']}
+
+function update(){
+  const m=model(P),an=analyzeP(P),ap=approx(P);
+  const poles=roots(m.den).map(z=>({...z,f:Math.hypot(z.re,z.im)/(2*Math.PI)})).sort((a,b)=>a.f-b.f);
+  const zeros=roots(m.num).map(z=>({...z,f:Math.hypot(z.re,z.im)/(2*Math.PI)}));
+  last={m,an,ap,poles,zeros};
+  // metrics
+  const [cls,lab]=status(an.pm);
+  document.getElementById('mPM').textContent=an.pm===null?'–':an.pm.toFixed(1)+'°';
+  const pill=document.getElementById('mPMpill');pill.className='pill '+cls;pill.textContent=lab;
+  document.getElementById('mPMbox').className='m pm '+cls;
+  document.getElementById('mUGF').textContent=an.ugf?eng(an.ugf,'Hz'):'–';
+  document.getElementById('mGM').textContent=an.gm===null?'∞':an.gm.toFixed(1)+' dB';
+  document.getElementById('mA0').textContent=an.a0.toFixed(1)+' dB';
+  table(ap,an,poles,zeros);advice(an,ap);draw();
+}
+
+function rootCell(r,isZero){if(!r)return '–';const rhp=r.re>0;const cplx=Math.abs(r.im)>1e-6*Math.abs(r.re);
+  return `${eng(r.f,'Hz')}${isZero||rhp?`<span class="tag ${rhp?'rhp':'lhp'}">${rhp?'右半面':'左半面'}</span>`:''}${cplx?'<span class="tag lhp">複素</span>':''}`}
+function table(ap,an,poles,zeros){
+  const zA=isFinite(ap.z)?`${eng(Math.abs(ap.z),'Hz')}<span class="tag ${ap.z>0?'rhp':'lhp'}">${ap.z>0?'右半面':'左半面'}</span>`:'∞';
+  const rows=[
+    ['DC 開ループ利得 A0','gm1·gm2·R1·R2',(20*Math.log10(ap.A0)).toFixed(1)+' dB',(an.a0-20*Math.log10(P.beta)).toFixed(1)+' dB'],
+    ['主極 p1','1 / (2π·gm2·R2·R1·Cc)',eng(ap.p1,'Hz'),rootCell(poles[0])],
+    ['第2極 p2','gm2·Cc / 2π(C1CL+Cc(C1+CL))',eng(ap.p2,'Hz'),rootCell(poles[1])],
+  ];
+  if(P.Rz>0)rows.push(['第3極 p3','1 / (2π·Rz·C1)',eng(ap.p3,'Hz'),rootCell(poles[2])]);
+  rows.push(['ゼロ z','1 / 2π·Cc(1/gm2 − Rz)',zA,zeros.length?rootCell(zeros[0],true):'∞']);
+  rows.push(['GBW / UGF','β·gm1 / (2π·Cc)',eng(ap.gbw,'Hz'),an.ugf?eng(an.ugf,'Hz'):'–']);
+  rows.push(['位相余裕','90° − atan(GBW/p2) − atan(GBW/z)',ap.pm.toFixed(1)+'°',an.pm===null?'–':an.pm.toFixed(1)+'°']);
+  document.getElementById('tbl').innerHTML='<thead><tr><th>項目</th><th>近似式</th><th style="text-align:right">近似</th><th style="text-align:right">厳密</th></tr></thead><tbody>'+
+    rows.map(r=>`<tr><td>${r[0]}</td><td class="f">${r[1]}</td><td class="n">${r[2]}</td><td class="n">${r[3]}</td></tr>`).join('')+'</tbody>';
+}
+function advice(an,ap){
+  const el=document.getElementById('advice');
+  if(an.pm===null){el.innerHTML='<strong>ループゲインが 0 dB を横切りません。</strong> 帰還率 β や gm1 が小さすぎる可能性があります。';return}
+  const ratio=ap.p2/ap.gbw;
+  if(an.pm>=60){el.innerHTML=`<strong>安定です（PM ${an.pm.toFixed(1)}°）。</strong> 第2極は GBW の ${ratio.toFixed(1)} 倍の位置にあります。速度を上げたいなら Cc を減らして PM がどこまで下がるかを確認してください。`;return}
+  const tips=[];
+  tips.push(`Cc を増やす：GBW（∝ gm1/Cc）が下がり、p2 との距離が広がります。「Cc を求める」で目標 PM に合わせられます。`);
+  if(isFinite(ap.z)&&ap.z>0&&ap.z<10*ap.gbw)tips.push(`右半面ゼロが GBW の ${(ap.z/ap.gbw).toFixed(1)} 倍と近く、位相を ${(Math.atan(ap.gbw/ap.z)*180/Math.PI).toFixed(0)}° 削っています。Rz = 1/gm2 で消せます。`);
+  tips.push(`gm2 を上げる：p2 ≈ gm2/CL が高域へ逃げます（消費電流とトレードオフ）。`);
+  if(P.CL>4*P.Cc)tips.push(`CL が Cc の ${(P.CL/P.Cc).toFixed(1)} 倍あり、p2 を押し下げています。経験則では Cc ≳ 0.22·CL（ゼロを 10·GBW に置いた場合）。`);
+  el.innerHTML=`<strong>${an.pm<=0?'不安定です':'位相余裕が不足しています'}（PM ${an.pm.toFixed(1)}°、p2 は GBW の ${ratio.toFixed(2)} 倍）。</strong><ul>${tips.map(t=>`<li>${t}</li>`).join('')}</ul>`;
+}
+
+/* ---------- plot ---------- */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function range(){
+  const fs=[];const {poles,zeros,an}=last;poles.concat(zeros).forEach(r=>{if(r.f>0&&isFinite(r.f))fs.push(r.f)});if(an.ugf)fs.push(an.ugf);
+  if(!fs.length)fs.push(1,1e6);
+  let lo=Math.floor(Math.log10(Math.min(...fs)))-1,hi=Math.ceil(Math.log10(Math.max(...fs)))+1;
+  if(hi-lo>14)lo=hi-14; if(hi-lo<4)hi=lo+4; return [lo,hi];
+}
+function draw(){
+  if(!last)return;
+  const dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;
+  cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+  const L=52,R=14,Tp=10,B=26,gap=34,ph=(H-Tp-B-gap),hm=ph*0.55,hp=ph-hm;
+  const yM0=Tp,yP0=Tp+hm+gap;
+  const [l0,l1]=range(),N=900;
+  const s=sweep(last.m,Math.pow(10,l0),Math.pow(10,l1),N);
+  const g=ghost?sweep(model(ghost),Math.pow(10,l0),Math.pow(10,l1),N):null;
+  const all=s.db.concat(g?g.db:[]);
+  let dmax=Math.ceil(Math.max(...all)/20)*20,dmin=Math.floor(Math.min(...all)/20)*20;dmin=Math.max(dmin,dmax-200,-120);if(dmax<=0)dmax=20;if(dmin>=0)dmin=-20;
+  const pall=s.ph.concat(g?g.ph:[]);
+  let pmin=Math.floor(Math.min(...pall)/45)*45;pmin=Math.max(Math.min(pmin,-180),-360);const pmax=Math.max(0,Math.ceil(Math.max(...pall)/45)*45);
+  const X=f=>L+(Math.log10(f)-l0)/(l1-l0)*(W-L-R);
+  const YM=d=>yM0+(dmax-Math.max(Math.min(d,dmax),dmin))/(dmax-dmin)*hm;
+  const YP=p=>yP0+(pmax-Math.max(Math.min(p,pmax),pmin))/(pmax-pmin)*hp;
+  const cGrid=css('--grid'),cLine=css('--line'),cMuted=css('--muted'),cFg=css('--fg');
+  ctx.font='11px '+css('--mono');ctx.lineWidth=1;
+  // grids
+  for(let e=l0;e<=l1;e++){for(let k=1;k<10;k++){const f=k*Math.pow(10,e);if(Math.log10(f)>l1)break;const x=Math.round(X(f))+.5;
+      ctx.strokeStyle=k===1?cLine:cGrid;ctx.beginPath();ctx.moveTo(x,yM0);ctx.lineTo(x,yM0+hm);ctx.moveTo(x,yP0);ctx.lineTo(x,yP0+hp);ctx.stroke()}
+    ctx.fillStyle=cMuted;ctx.textAlign='center';ctx.fillText(eng(Math.pow(10,e),'Hz',1).replace(' ',''),X(Math.pow(10,e)),H-8)}
+  const dstep=(dmax-dmin)>120?40:20;
+  ctx.textAlign='right';
+  for(let d=dmin;d<=dmax;d+=dstep){const y=Math.round(YM(d))+.5;ctx.strokeStyle=d===0?cMuted:cGrid;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(W-R,y);ctx.stroke();ctx.fillStyle=cMuted;ctx.fillText(d+'',L-6,y+4)}
+  const pstep=(pmax-pmin)>180?90:45;
+  for(let p=pmin;p<=pmax;p+=pstep){const y=Math.round(YP(p))+.5;ctx.strokeStyle=p===-180?cMuted:cGrid;ctx.setLineDash(p===-180?[4,3]:[]);ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(W-R,y);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=cMuted;ctx.fillText(p+'°',L-6,y+4)}
+  ctx.strokeStyle=cLine;ctx.strokeRect(L+.5,yM0+.5,W-L-R,hm);ctx.strokeRect(L+.5,yP0+.5,W-L-R,hp);
+  ctx.save();ctx.textAlign='left';ctx.fillStyle=cMuted;ctx.fillText('|T| dB',L+6,yM0+13);ctx.fillText('∠T',L+6,yP0+13);ctx.restore();
+  // curves
+  const line=(arr,Y,col,w)=>{ctx.save();ctx.beginPath();ctx.rect(L,0,W-L-R,H);ctx.clip();ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();arr.forEach((v,i)=>{const x=X(s.f[i]),y=Y(v);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.restore()};
+  if(g){line(g.db,YM,css('--ghost'),1.5);line(g.ph,YP,css('--ghost'),1.5)}
+  line(s.db,YM,css('--mag'),2);line(s.ph,YP,css('--phase'),2);
+  // UGF + PM
+  const an=last.an;
+  if(an.ugf){const x=X(an.ugf);const [cls]=status(an.pm);const sc=css('--'+cls);
+    ctx.strokeStyle=cMuted;ctx.setLineDash([2,3]);ctx.beginPath();ctx.moveTo(x,yM0);ctx.lineTo(x,yP0+hp);ctx.stroke();ctx.setLineDash([]);
+    const y1=YP(-180),y2=YP(-180+an.pm);ctx.strokeStyle=sc;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y1);ctx.lineTo(x,y2);ctx.stroke();ctx.lineWidth=1;
+    ctx.fillStyle=sc;ctx.beginPath();ctx.arc(x,YM(0),3.5,0,7);ctx.fill();
+    ctx.font='500 12px '+css('--mono');ctx.textAlign=x>W-130?'right':'left';ctx.fillText('PM '+an.pm.toFixed(1)+'°',x+(x>W-130?-8:8),(y1+y2)/2+4);ctx.font='11px '+css('--mono')}
+  if(an.f180&&Math.log10(an.f180)<l1){const x=X(an.f180);ctx.fillStyle=css('--phase');ctx.beginPath();ctx.arc(x,YP(-180),3,0,7);ctx.fill()}
+  // pole/zero strip
+  const ys=yM0+hm+gap/2+1;
+  const mk=(r,lab,isZ)=>{if(!(r.f>0)||Math.log10(r.f)<l0||Math.log10(r.f)>l1)return;const x=X(r.f);const col=isZ?(r.re>0?css('--bad'):css('--good')):cFg;
+    ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1.6;
+    if(isZ){ctx.beginPath();ctx.arc(x,ys-4,4.5,0,7);ctx.stroke()}else{ctx.beginPath();ctx.moveTo(x-4,ys-8);ctx.lineTo(x+4,ys);ctx.moveTo(x+4,ys-8);ctx.lineTo(x-4,ys);ctx.stroke()}
+    ctx.lineWidth=1;ctx.textAlign='left';ctx.fillText(lab,x+7,ys)};
+  last.poles.forEach((r,i)=>mk(r,'p'+(i+1),false));last.zeros.forEach(r=>mk(r,'z',true));
+  // hover
+  if(hoverF){const x=X(hoverF);ctx.strokeStyle=cFg;ctx.globalAlpha=.35;ctx.beginPath();ctx.moveTo(x,yM0);ctx.lineTo(x,yP0+hp);ctx.stroke();ctx.globalAlpha=1}
+  draw.X=X;draw.inv=px=>Math.pow(10,l0+(px-L)/(W-L-R)*(l1-l0));draw.L=L;draw.R=R;
+}
+function hover(e){const r=cv.getBoundingClientRect();const px=e.clientX-r.left;if(px<draw.L||px>r.width-draw.R){leave();return}
+  hoverF=draw.inv(px);const [re,im]=T(last.m,hoverF);let a=Math.atan2(im,re)*180/Math.PI;
+  const s=sweep(last.m,Math.min(1e-3,hoverF),hoverF,400);a=s.ph[s.ph.length-1];
+  document.getElementById('readout').textContent=`${eng(hoverF,'Hz')}   |T| ${(20*Math.log10(Math.hypot(re,im))).toFixed(1)} dB   ∠T ${a.toFixed(1)}°`;draw()}
+function leave(){hoverF=null;document.getElementById('readout').textContent='グラフ上をなぞると値を表示';draw()}
+cv.addEventListener('pointermove',hover);cv.addEventListener('pointerleave',leave);
+new ResizeObserver(()=>draw()).observe(cv);
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw)}catch(e){}
+new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+syncInputs();update();
+</script>
+
+</body>
+</html>
